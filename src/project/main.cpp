@@ -36,8 +36,9 @@ void renderModel(Model &model, Shader &shader);
 const unsigned int SCR_WIDTH = 800;
 const unsigned int SCR_HEIGHT = 600;
 
-// camera
-Camera camera(glm::vec3(0.0f, 0.0f, 3.0f));
+// 创建摄像机
+Camera camera(glm::vec3(-2.0f, 1.0f, 4.0f));
+
 float lastX = SCR_WIDTH / 2.0f;
 float lastY = SCR_HEIGHT / 2.0f;
 bool firstMouse = true;
@@ -111,8 +112,8 @@ int main()
     // Shader grassShader("src/project/shadow.vs", "src/project/shadow.fs"); // plain
     Shader backPackShader("src/project/model.vs", "src/project/model.fs"); // model
     // Shader backPackShader("src/project/shadow.vs", "src/project/shadow.fs"); // model
-    // Shader shader("src/project/shadow.vs", "src/project/shadow.fs"); // the whole scene
-    Shader model("src/project/model.vs", "src/project/model.fs"); // the whole scene
+    Shader shadow("src/project/shadow.vs", "src/project/shadow.fs"); // the whole scene
+    //Shader model("src/project/model.vs", "src/project/model.fs"); // the whole scene
 
 
     // set up vertex data (and buffer(s)) and configure vertex attributes
@@ -203,7 +204,7 @@ int main()
         glClearColor(0.05f, 0.05f, 0.05f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        /*// render depth of scene to texture (from light's perspective)
+        // render depth of scene to texture (from light's perspective)
         // --------------------------------------------------------------
         glm::mat4 lightProjection, lightView;
         glm::mat4 lightSpaceMatrix;
@@ -230,8 +231,8 @@ int main()
         // renderScene
         grassShader.use();
         //modelShader.setVec3("objectColor", 1.0f, 0.5f, 0.31f);
-        grassShader.setVec3("lightColor", lightColor);
-        grassShader.setVec3("lightPos", lightPos);
+        //grassShader.setVec3("lightColor", lightColor);
+        grassShader.setVec3("light.position", lightPos);
         grassShader.setVec3("viewPos", camera.Position);
         
 
@@ -264,12 +265,12 @@ int main()
         // 背包
         backPackShader.use();
         backPackShader.setVec3("lightColor", lightColor);
-        backPackShader.setVec3("lightPos", lightPos);
+        backPackShader.setVec3("light.position", lightPos);
         backPackShader.setVec3("viewPos", camera.Position);
 
         // light properties
         backPackShader.setVec3("light.ambient", 0.5f, 0.5f, 0.5f);  // 环境光
-        backPackShader.setVec3("light.diffuse", 0.2f, 0.2f, 0.2f);  // 漫反射光
+        backPackShader.setVec3("light.diffuse", 0.4f, 0.4f, 0.4f);  // 漫反射光
         backPackShader.setVec3("light.specular", 0.0f, 0.0f, 0.0f);  // 镜面反射光
         backPackShader.setFloat("material.shininess", 0.0f);   
 
@@ -306,24 +307,62 @@ int main()
 
         // render scene as normal using the generated depth/shadow map
         // ----------------------------------------------------------
-        shader.use();
+        shadow.use();
         projection = glm::perspective(glm::radians(camera.Zoom), static_cast<float>(SCR_WIDTH) / static_cast<float>(SCR_HEIGHT), 0.1f, 100.0f);
         view = camera.GetViewMatrix();
-        shader.setMat4("projection", projection);
-        shader.setMat4("view", view);
+        shadow.setMat4("projection", projection);
+        shadow.setMat4("view", view);
         // set light uniforms
-        shader.setVec3("lightPos", lightPos);
-        shader.setVec3("viewPos", camera.Position);
-        shader.setMat4("lightSpaceMatrix", lightSpaceMatrix);
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, grassMap);
+        shadow.setVec3("lightPos", lightPos);
+        shadow.setVec3("viewPos", camera.Position);
+        shadow.setMat4("lightSpaceMatrix", lightSpaceMatrix);
+        
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, depthMap);
-        renderScene(shader);*/
+        // 草坪
+        shadow.setVec3("light.ambient", 0.5f, 0.5f, 0.5f);  // 环境光
+        shadow.setVec3("light.diffuse", 0.2f, 0.2f, 0.2f);  // 漫反射光
+        shadow.setVec3("light.specular", 0.0f, 0.0f, 0.0f);  // 镜面反射光
+        shadow.setFloat("material.shininess", 0.0f);         // 光泽度
+        shadow.setMat4("model", model);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, grassMap);
+        glBindVertexArray(planeVAO);
+        glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+
+        // 背包
+        shadow.setVec3("light.ambient", 0.5f, 0.5f, 0.5f);  // 环境光
+        shadow.setVec3("light.diffuse", 0.4f, 0.4f, 0.4f);  // 漫反射光
+        shadow.setVec3("light.specular", 0.0f, 0.0f, 0.0f);  // 镜面反射光
+        shadow.setFloat("material.shininess", 0.0f);    // 光泽度
+        shadow.setMat4("model", model);
+        backPack.Draw(shadow);
+        model = glm::mat4(1.0f);
+        model = glm::translate(model, glm::vec3(0.0f, 0.13f, -0.6f)); // translate it down so it's at the center of the scene
+        model = glm::scale(model, glm::vec3(0.08f, 0.08f, 0.08f));	// it's a bit too big for our scene, so scale it down
+        shadow.setMat4("model", model);
+        backPack.Draw(shadow);
+
+        lightShader.use();
+        lightShader.setVec3("lightColor", lightColor);
+        lightShader.setMat4("projection", projection);
+        lightShader.setMat4("view", view);
+
+        model = glm::mat4(1.0f);
+        model = glm::translate(model, lightPos);
+        model = glm::scale(model, glm::vec3(0.6f)); // a smaller cube
+        lightShader.setMat4("model", model);
+
+        glBindVertexArray(lightCubeVAO);
+        glDrawArrays(GL_TRIANGLES, 0, sphereVertices.size() / 6);
+
+        
+        
+
 
 
         // 草坪
-        grassShader.use();
+        /*grassShader.use();
         //modelShader.setVec3("objectColor", 1.0f, 0.5f, 0.31f);
         //grassShader.setVec3("lightColor", lightColor);
         grassShader.setVec3("light.position", lightPos);
@@ -392,7 +431,7 @@ int main()
         lightShader.setMat4("model", model);
 
         glBindVertexArray(lightCubeVAO);
-        glDrawArrays(GL_TRIANGLES, 0, sphereVertices.size() / 6);
+        glDrawArrays(GL_TRIANGLES, 0, sphereVertices.size() / 6);*/
 
 
         // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
