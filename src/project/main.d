@@ -76,7 +76,7 @@ src/project/main.o: src/project/main.cpp include/glad/glad.h \
  include/glm/gtc/../gtc/quaternion.hpp \
  include/glm/gtc/../gtc/quaternion.inl \
  include/glm/gtc/../gtc/quaternion_simd.inl include/glm/gtc/type_ptr.inl \
- include/learnopengl/shader_m.h include/learnopengl/camera.h \
+ include/learnopengl/shader.h include/learnopengl/camera.h \
  include/learnopengl/model.h include/assimp/Importer.hpp \
  include/assimp/types.h include/assimp/defs.h include/assimp/vector3.h \
  include/assimp/./Compiler/pushpack1.h \
@@ -90,5 +90,4 @@ src/project/main.o: src/project/main.cpp include/glad/glad.h \
  include/assimp/mesh.h include/assimp/light.h include/assimp/camera.h \
  include/assimp/material.h include/assimp/material.inl \
  include/assimp/anim.h include/assimp/metadata.h \
- include/assimp/postprocess.h include/learnopengl/mesh.h \
- include/learnopengl/shader.h
+ include/assimp/postprocess.h include/learnopengl/mesh.h

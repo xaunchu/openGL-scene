@@ -10,7 +10,8 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-#include <learnopengl/shader_m.h>
+// #include <learnopengl/shader_m.h>
+#include <learnopengl/shader.h>
 #include <learnopengl/camera.h>
 #include <learnopengl/model.h>
 
@@ -28,9 +29,11 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 void processInput(GLFWwindow *window);
 unsigned int setupMesh(const std::vector<float>& vertices, const std::vector<unsigned int>& attributes);
 std::vector<float> generateSphereVertices(float radius, unsigned int sectorCount, unsigned int stackCount);
+std::vector<float> generateDonutVertices(float R, float r, unsigned int sectorCount, unsigned int stackCount);
 unsigned int loadTexture(const char *path);
-void renderScene(Shader &shader);
-void renderModel(Model &model, Shader &shader);
+void renderScene(Shader &shader, Model &backPack);
+// void renderModel(Model &model, Shader &shader);
+void renderDonut(Shader &shader);
 
 // settings
 const unsigned int SCR_WIDTH = 800;
@@ -53,15 +56,18 @@ glm::vec3 lightColor(1.0f, 0.98f, 0.75f);
 //glm::vec3 lightColor(1.0f, 1.0f, 1.0f);
 
 // rotation speed (can adjust this value)
-float rotationSpeed = 0.2f;
+float rotationSpeed = 0.5f;
 
 // mesh VAO
 unsigned int planeVAO;
 unsigned int lightCubeVAO;
+unsigned int donutVAO;
 
 // sphere vertices
 std::vector<float> sphereVertices;
 
+// donut vertices
+std::vector<float> donutVertices;
 
 
 int main()
@@ -114,6 +120,7 @@ int main()
     // Shader backPackShader("src/project/shadow.vs", "src/project/shadow.fs"); // model
     Shader shadow("src/project/shadow.vs", "src/project/shadow.fs"); // the whole scene
     //Shader model("src/project/model.vs", "src/project/model.fs"); // the whole scene
+    Shader depthShader("src/project/shadow_depth.vs", "src/project/shadow_depth.fs", "src/project/shadow_depth.gs"); // depth map
 
 
     // set up vertex data (and buffer(s)) and configure vertex attributes
@@ -126,9 +133,13 @@ int main()
         -1.0f, 0.0f, 1.0f,   0.0f, 1.0f, 0.0f,  0.0f, 1.0f
     };
 
+
     sphereVertices = generateSphereVertices(0.5f, 36, 18);
+    donutVertices = generateDonutVertices(1.0f, 0.5f, 36, 18);
+
     planeVAO = setupMesh(std::vector<float>(plane, plane + 32), { 3, 3, 2 });
     lightCubeVAO = setupMesh(sphereVertices, { 3, 3 });
+    donutVAO = setupMesh(donutVertices, { 3, 3 });
 
     // load textures (we now use a utility function to keep the code more organized)
     unsigned int grassMap = loadTexture("resources/textures/grass.png");
@@ -139,20 +150,20 @@ int main()
     const unsigned int SHADOW_WIDTH = 1024, SHADOW_HEIGHT = 1024;
     unsigned int depthMapFBO;
     glGenFramebuffers(1, &depthMapFBO);
-    // create depth texture
-    unsigned int depthMap;
-    glGenTextures(1, &depthMap);
-    glBindTexture(GL_TEXTURE_2D, depthMap);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, SHADOW_WIDTH, SHADOW_HEIGHT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
-    float borderColor[] = { 1.0, 1.0, 1.0, 1.0 };
-    glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
+    // create depth cubemap texture
+    unsigned int depthCubemap;
+    glGenTextures(1, &depthCubemap);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, depthCubemap);
+    for (unsigned int i = 0; i < 6; ++i)
+        glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_DEPTH_COMPONENT, SHADOW_WIDTH, SHADOW_HEIGHT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
     // attach depth texture as FBO's depth buffer
     glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depthMap, 0);
+    glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, depthCubemap, 0);
     glDrawBuffer(GL_NONE);
     glReadBuffer(GL_NONE);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -190,13 +201,13 @@ int main()
 
         // 计算光源的新位置
         float angle = glfwGetTime() * rotationSpeed; // 旋转速度
-        float radius = 3.0f; // 光源旋转半径
+        float radius = 2.0f; // 光源旋转半径
 
         // 更新光源位置，绕 (0, 0, 0) 旋转
-        lightPos = glm::vec3(cos(angle) * radius, 1.0f, sin(angle) * radius);
+        lightPos = glm::vec3(cos(angle) * radius, 2.0f, sin(angle) * radius);
 
         // 如果希望光源上下浮动，可以使用正弦函数
-        lightPos.y = -1.0f + sin(angle * 0.5f) * 2.0f; // 上下浮动
+        lightPos.y = 0.5f + sin(angle * 0.5f) * 2.0f; // 上下浮动
 
 
          // render 
@@ -204,15 +215,55 @@ int main()
         glClearColor(0.05f, 0.05f, 0.05f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        // render depth of scene to texture (from light's perspective)
-        // --------------------------------------------------------------
-        glm::mat4 lightProjection, lightView;
-        glm::mat4 lightSpaceMatrix;
-        float near_plane = 1.0f, far_plane = 7.5f;
-        lightProjection = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, near_plane, far_plane);
-        lightView = glm::lookAt(lightPos, glm::vec3(0.0f), glm::vec3(0.0, 1.0, 0.0));
-        lightSpaceMatrix = lightProjection * lightView;
+        // 0. create depth cubemap transformation matrices
+        // -----------------------------------------------
+        float near_plane = 1.0f;
+        float far_plane = 25.0f;
+        glm::mat4 shadowProj = glm::perspective(glm::radians(90.0f), (float)SHADOW_WIDTH / (float)SHADOW_HEIGHT, near_plane, far_plane);
+        std::vector<glm::mat4> shadowTransforms;
+        shadowTransforms.push_back(shadowProj * glm::lookAt(lightPos, lightPos + glm::vec3(1.0f, 0.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f)));
+        shadowTransforms.push_back(shadowProj * glm::lookAt(lightPos, lightPos + glm::vec3(-1.0f, 0.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f)));
+        shadowTransforms.push_back(shadowProj * glm::lookAt(lightPos, lightPos + glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f)));
+        shadowTransforms.push_back(shadowProj * glm::lookAt(lightPos, lightPos + glm::vec3(0.0f, -1.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f)));
+        shadowTransforms.push_back(shadowProj * glm::lookAt(lightPos, lightPos + glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(0.0f, -1.0f, 0.0f)));
+        shadowTransforms.push_back(shadowProj * glm::lookAt(lightPos, lightPos + glm::vec3(0.0f, 0.0f, -1.0f), glm::vec3(0.0f, -1.0f, 0.0f)));
 
+        // 1. render scene to depth cubemap
+        // --------------------------------------------------------------
+        glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
+        glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
+        glClear(GL_DEPTH_BUFFER_BIT);
+        depthShader.use();
+        for (unsigned int i = 0; i < 6; ++i)
+            depthShader.setMat4("shadowMatrices[" + std::to_string(i) + "]", shadowTransforms[i]);
+        depthShader.setFloat("far_plane", far_plane);
+        depthShader.setVec3("lightPos", lightPos);
+        renderScene(depthShader, backPack);
+        
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+        // 2. render scene as normal
+        // --------------------------------------------------------------
+        glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        shadow.use();
+        glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), static_cast<float>(SCR_WIDTH) / static_cast<float>(SCR_HEIGHT), 0.1f, 100.0f);
+        glm::mat4 view = camera.GetViewMatrix();
+        shadow.setMat4("projection", projection);
+        shadow.setMat4("view", view);
+        // set lighting uniforms
+        shadow.setVec3("lightPos", lightPos);
+        shadow.setVec3("viewPos", camera.Position);
+        shadow.setInt("shadows", 1); // enable/disable shadows by pressing 'SPACE'
+        shadow.setFloat("far_plane", far_plane);
+        shadow.setVec3("lightColor", lightColor);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, grassMap);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, depthCubemap);
+        renderScene(shadow, backPack);
+        
+        /*
         // render scene from light's point of view
         // ---------------------------------------
         lightShader.use();
@@ -301,7 +352,9 @@ int main()
 
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-        // reset viewport
+        */
+
+        /*// reset viewport
         glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -319,43 +372,13 @@ int main()
         
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, depthMap);
-        // 草坪
-        shadow.setVec3("light.ambient", 0.5f, 0.5f, 0.5f);  // 环境光
-        shadow.setVec3("light.diffuse", 0.2f, 0.2f, 0.2f);  // 漫反射光
-        shadow.setVec3("light.specular", 0.0f, 0.0f, 0.0f);  // 镜面反射光
-        shadow.setFloat("material.shininess", 0.0f);         // 光泽度
+        
         shadow.setMat4("model", model);
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, grassMap);
         glBindVertexArray(planeVAO);
         glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
 
-        // 背包
-        shadow.setVec3("light.ambient", 0.5f, 0.5f, 0.5f);  // 环境光
-        shadow.setVec3("light.diffuse", 0.4f, 0.4f, 0.4f);  // 漫反射光
-        shadow.setVec3("light.specular", 0.0f, 0.0f, 0.0f);  // 镜面反射光
-        shadow.setFloat("material.shininess", 0.0f);    // 光泽度
         shadow.setMat4("model", model);
-        backPack.Draw(shadow);
-        model = glm::mat4(1.0f);
-        model = glm::translate(model, glm::vec3(0.0f, 0.13f, -0.6f)); // translate it down so it's at the center of the scene
-        model = glm::scale(model, glm::vec3(0.08f, 0.08f, 0.08f));	// it's a bit too big for our scene, so scale it down
-        shadow.setMat4("model", model);
-        backPack.Draw(shadow);
-
-        lightShader.use();
-        lightShader.setVec3("lightColor", lightColor);
-        lightShader.setMat4("projection", projection);
-        lightShader.setMat4("view", view);
-
-        model = glm::mat4(1.0f);
-        model = glm::translate(model, lightPos);
-        model = glm::scale(model, glm::vec3(0.6f)); // a smaller cube
-        lightShader.setMat4("model", model);
-
-        glBindVertexArray(lightCubeVAO);
-        glDrawArrays(GL_TRIANGLES, 0, sphereVertices.size() / 6);
-
+        backPack.Draw(shadow);*/
         
         
 
@@ -653,6 +676,95 @@ unsigned int loadTexture(char const * path)
     return textureID;
 }
 
+// renders the 3D scene
+// --------------------
+void renderScene(Shader &shader, Model &backPack)
+{
+    // render plane
+    glm::mat4 model = glm::mat4(1.0f);
+    shader.setBool("isLightSource", false);
+    shader.setBool("isModel", true);
+    shader.setMat4("model", model);
+    shader.setVec3("lightColor", lightColor);
+    glBindVertexArray(planeVAO);
+    glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+
+    // render the loaded model
+    model = glm::mat4(1.0f);
+    model = glm::translate(model, glm::vec3(0.0f, 0.13f, -0.6f)); // translate it down so it's at the center of the scene
+    model = glm::scale(model, glm::vec3(0.08f, 0.08f, 0.08f));	// it's a bit too big for our scene, so scale it down
+     shader.setBool("isLightSource", false);
+     shader.setBool("isModel", true);
+    shader.setMat4("model", model);
+    shader.setVec3("lightColor", lightColor);
+    backPack.Draw(shader);
+
+    // render light cube
+    model = glm::mat4(1.0f);
+    model = glm::translate(model, lightPos);
+    model = glm::scale(model, glm::vec3(0.6f)); // a smaller cube
+    shader.setBool("isLightSource", true);
+    shader.setBool("isModel", true);
+    shader.setMat4("model", model);
+    shader.setVec3("lightColor", lightColor);
+    glBindVertexArray(lightCubeVAO);
+    glDrawArrays(GL_TRIANGLES, 0, sphereVertices.size() / 6);
+    
+    // render donut
+    model = glm::mat4(1.0f);
+    model = glm::translate(model, glm::vec3(0.0f, 0.13f, -0.6f));
+    model = glm::scale(model, glm::vec3(0.1f, 0.1f, 0.1f));
+    shader.setBool("isLightSource", false);
+    shader.setBool("isModel", false);
+    shader.setMat4("model", model);
+    shader.setVec3("lightColor", lightColor);
+    shader.setVec3("objectColor", 1.0f, 0.647f, 0.0f);
+    glBindVertexArray(donutVAO);
+    glDrawArrays(GL_TRIANGLES, 0, donutVertices.size() / 6);
+}
+
+// 生成甜甜圈顶点数据
+std::vector<float> generateDonutVertices(float R, float r, unsigned int sectorCount, unsigned int stackCount)
+{
+    std::vector<float> vertices;
+    float x, y, z, xy;                              // vertex position
+    float nx, ny, nz, lengthInv = 1.0f;            // vertex normal
+    float sectorStep = 2 * M_PI / sectorCount;      // Angle between each sector
+    float stackStep = M_PI / stackCount;            // Angle between each stack
+    float sectorAngle, stackAngle;
+
+    for (unsigned int i = 0; i <= stackCount; ++i)
+    {
+        stackAngle = M_PI / 2 - i * stackStep;       // Starting from pi/2 to -pi/2
+        xy = R + r * cosf(stackAngle);               // r * cos(u) + R
+        z = r * sinf(stackAngle);                    // r * sin(u)
+
+        // Loop through each sector
+        for (unsigned int j = 0; j <= sectorCount; ++j)
+        {
+            sectorAngle = j * sectorStep;            // Starting from 0 to 2pi
+
+            // Vertex position (x, y, z)
+            x = xy * cosf(sectorAngle);              // r * cos(u) * cos(v)
+            y = xy * sinf(sectorAngle);              // r * cos(u) * sin(v)
+            vertices.push_back(x);
+            vertices.push_back(y);
+            vertices.push_back(z);
+
+            // Normal calculation
+            nx = cosf(stackAngle) * cosf(sectorAngle);  // Normal in x direction
+            ny = cosf(stackAngle) * sinf(sectorAngle);  // Normal in y direction
+            nz = sinf(stackAngle);                      // Normal in z direction
+            vertices.push_back(nx);
+            vertices.push_back(ny);
+            vertices.push_back(nz);
+        }
+    }
+
+    return vertices;
+}
+
+
 // render the entire scene
 /*void renderScene(Shader &shader)
 {
@@ -686,4 +798,5 @@ unsigned int loadTexture(char const * path)
     shader.use();
     model.Draw(shader);
 }*/
+
 
