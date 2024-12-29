@@ -19,6 +19,9 @@ uniform float far_plane;
 uniform bool shadows;
 uniform bool isLightSource;
 uniform bool isModel;
+uniform bool isSkybox;
+
+uniform samplerCube skybox;
 
 // array of offset direction for sampling
 vec3 gridSamplingDisk[20] = vec3[]
@@ -63,8 +66,10 @@ float ShadowCalculation(vec3 fragPos)
     // }
     // shadow /= (samples * samples * samples);
     float shadow = 0.0;
-    float bias = 0.15;
-    int samples = 20;
+    // float bias = 0.15;
+    float bias = 0.05;
+    // int samples = 20;
+    int samples = 40;
     float viewDistance = length(viewPos - fragPos);
     float diskRadius = (1.0 + (viewDistance / far_plane)) / 25.0;
     for(int i = 0; i < samples; ++i)
@@ -89,6 +94,12 @@ void main()
         FragColor = vec4(lightColor, 1.0);
         return;
     }
+
+    if (isSkybox)
+    {
+        FragColor = texture(skybox, fs_in.Normal);
+        return;
+    }
   
     vec3 color = texture(diffuseTexture, fs_in.TexCoords).rgb;
     vec3 normal = normalize(fs_in.Normal);
@@ -104,7 +115,7 @@ void main()
     vec3 reflectDir = reflect(-lightDir, normal);
     float spec = 0.0;
     vec3 halfwayDir = normalize(lightDir + viewDir);  
-    spec = pow(max(dot(normal, halfwayDir), 0.0), 4.0);
+    spec = pow(max(dot(normal, halfwayDir), 0.0), 8.0);
     vec3 specular = 0.2 * spec * lightColor;    
     // calculate shadow
     float shadow = shadows ? ShadowCalculation(fs_in.FragPos) : 0.0;                      
@@ -113,7 +124,9 @@ void main()
     //FragColor = vec4(lighting, 1.0);
     // 加上光的颜色
     if (!isModel) {
-        FragColor = vec4(lighting * objectColor * lightColor, 1.0);
+        specular = 0.4 * spec * lightColor;  
+        lighting = (ambient + (1.0 - shadow) * (diffuse + specular)) * objectColor;
+         FragColor = vec4(lighting * objectColor * lightColor, 1.0);
         return;
     }
     FragColor = vec4(lighting * lightColor, 1.0);

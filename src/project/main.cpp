@@ -28,12 +28,17 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 void processInput(GLFWwindow *window);
 unsigned int setupMesh(const std::vector<float>& vertices, const std::vector<unsigned int>& attributes);
+unsigned int setupMeshWithIndices(const std::vector<float>& vertices, const std::vector<unsigned int>& indices, const std::vector<unsigned int>& attributes);
 std::vector<float> generateSphereVertices(float radius, unsigned int sectorCount, unsigned int stackCount);
 std::vector<float> generateDonutVertices(float R, float r, unsigned int sectorCount, unsigned int stackCount);
+std::vector<float> generateCylinderVertices(float radius, float height, unsigned int sectorCount, std::vector<unsigned int>& indices);
+std::vector<float> generateHollowCylinderVertices(float R, float r, float height, unsigned int sectorCount, std::vector<unsigned int>& indices);
 unsigned int loadTexture(const char *path);
 void renderScene(Shader &shader, Model &backPack);
+void renderVehicle(Shader &shader);
+unsigned int loadCubemap(vector<std::string> faces);
 // void renderModel(Model &model, Shader &shader);
-void renderDonut(Shader &shader);
+// void renderDonut(Shader &shader);
 
 // settings
 const unsigned int SCR_WIDTH = 800;
@@ -58,16 +63,35 @@ glm::vec3 lightColor(1.0f, 0.98f, 0.75f);
 // rotation speed (can adjust this value)
 float rotationSpeed = 0.5f;
 
+// camera speed (can adjust this value)
+float cameraSpeed = 0.005f;
+
+// 头部的旋转矩阵
+float headRotationAngle = 0.0f;
+
 // mesh VAO
 unsigned int planeVAO;
 unsigned int lightCubeVAO;
 unsigned int donutVAO;
+unsigned int cubeVAO;
+unsigned int skyboxVAO;
 
 // sphere vertices
 std::vector<float> sphereVertices;
 
 // donut vertices
 std::vector<float> donutVertices;
+// 索引
+std::vector<unsigned int> donutIndices;
+
+// vehicle
+unsigned int wheelVAO, bodyVAO, headVAO, weaponVAO;
+std::vector<float> wheel, weapon;
+std::vector<unsigned int> wheelIndices, weaponIndices;
+// 车辆的整体模型矩阵
+glm::mat4 vehicleModel = glm::mat4(1.0f);
+
+
 
 
 int main()
@@ -121,6 +145,7 @@ int main()
     Shader shadow("src/project/shadow.vs", "src/project/shadow.fs"); // the whole scene
     //Shader model("src/project/model.vs", "src/project/model.fs"); // the whole scene
     Shader depthShader("src/project/shadow_depth.vs", "src/project/shadow_depth.fs", "src/project/shadow_depth.gs"); // depth map
+    Shader skyboxShader("src/6.1.cubemaps_skybox/6.1.skybox.vs", "src/6.1.cubemaps_skybox/6.1.skybox.fs");
 
 
     // set up vertex data (and buffer(s)) and configure vertex attributes
@@ -133,16 +158,197 @@ int main()
         -1.0f, 0.0f, 1.0f,   0.0f, 1.0f, 0.0f,  0.0f, 1.0f
     };
 
+    // 正方体
+    float vertices[] = {
+        -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+         0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+         0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+         0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+        -0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+        -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+
+        -0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
+         0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
+         0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
+         0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
+        -0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
+        -0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
+
+        -0.5f,  0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
+        -0.5f,  0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
+        -0.5f, -0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
+        -0.5f, -0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
+        -0.5f, -0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
+        -0.5f,  0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
+
+         0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
+         0.5f,  0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
+         0.5f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
+         0.5f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
+         0.5f, -0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
+         0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
+
+        -0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
+         0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
+         0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
+         0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
+        -0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
+        -0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
+
+        -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,
+         0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,
+         0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
+         0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
+        -0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
+        -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f
+    };
+
+    // 长方体
+    float body[] = {
+        // positions          // normals
+        -1.0f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+         1.0f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+         1.0f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+         1.0f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+        -1.0f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+        -1.0f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+
+        -1.0f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
+         1.0f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
+         1.0f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
+         1.0f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
+        -1.0f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
+        -1.0f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
+
+        -1.0f,  0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
+        -1.0f,  0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
+        -1.0f, -0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
+        -1.0f, -0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
+        -1.0f, -0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
+        -1.0f,  0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
+
+         1.0f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
+         1.0f,  0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
+         1.0f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
+         1.0f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
+         1.0f, -0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
+         1.0f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
+
+        -1.0f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
+         1.0f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
+         1.0f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
+         1.0f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
+        -1.0f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
+        -1.0f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
+
+        -1.0f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,
+         1.0f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,
+         1.0f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
+         1.0f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
+        -1.0f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
+        -1.0f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f
+    };
+
+    float skyboxVertices[] = {
+        // positions          
+        -1.0f,  1.0f, -1.0f,
+        -1.0f, -1.0f, -1.0f,
+         1.0f, -1.0f, -1.0f,
+         1.0f, -1.0f, -1.0f,
+         1.0f,  1.0f, -1.0f,
+        -1.0f,  1.0f, -1.0f,
+
+        -1.0f, -1.0f,  1.0f,
+        -1.0f, -1.0f, -1.0f,
+        -1.0f,  1.0f, -1.0f,
+        -1.0f,  1.0f, -1.0f,
+        -1.0f,  1.0f,  1.0f,
+        -1.0f, -1.0f,  1.0f,
+
+         1.0f, -1.0f, -1.0f,
+         1.0f, -1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f, -1.0f,
+         1.0f, -1.0f, -1.0f,
+
+        -1.0f, -1.0f,  1.0f,
+        -1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f, -1.0f,  1.0f,
+        -1.0f, -1.0f,  1.0f,
+
+        -1.0f,  1.0f, -1.0f,
+         1.0f,  1.0f, -1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,
+        -1.0f,  1.0f,  1.0f,
+        -1.0f,  1.0f, -1.0f,
+
+        -1.0f, -1.0f, -1.0f,
+        -1.0f, -1.0f,  1.0f,
+         1.0f, -1.0f, -1.0f,
+         1.0f, -1.0f, -1.0f,
+        -1.0f, -1.0f,  1.0f,
+         1.0f, -1.0f,  1.0f
+    };
+
 
     sphereVertices = generateSphereVertices(0.5f, 36, 18);
     donutVertices = generateDonutVertices(1.0f, 0.5f, 36, 18);
+    wheel = generateCylinderVertices(0.5f, 0.5f, 36, wheelIndices);
+    weapon = generateHollowCylinderVertices(0.1f, 0.05f, 1.0f, 36, weaponIndices);
 
     planeVAO = setupMesh(std::vector<float>(plane, plane + 32), { 3, 3, 2 });
     lightCubeVAO = setupMesh(sphereVertices, { 3, 3 });
-    donutVAO = setupMesh(donutVertices, { 3, 3 });
+    //donutVAO = setupMesh(donutVertices, { 3, 3 });
+    // cubeVAO = setupMesh(std::vector<float>(vertices, vertices + 180), { 3, 3 });
+    cubeVAO = setupMesh(std::vector<float>(vertices, vertices + 216), { 3, 3 });
+    donutVAO = setupMeshWithIndices(donutVertices, donutIndices, { 3, 3 });
+    bodyVAO = setupMesh(std::vector<float>(body, body + 216), { 3, 3 });
+    wheelVAO = setupMeshWithIndices(wheel, wheelIndices, { 3, 3 });
+    weaponVAO = setupMeshWithIndices(weapon, weaponIndices, { 3, 3 });
+    skyboxVAO = setupMesh(std::vector<float>(skyboxVertices, skyboxVertices + 108), { 3 });
+    // Vehicle.generateWheel();
+    // donut VAO
+    /*unsigned int VBO, EBO;
+    glGenVertexArrays(1, &donutVAO);
+    glGenBuffers(1, &VBO);
+    glGenBuffers(1, &EBO);
+
+    glBindVertexArray(donutVAO);
+
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBufferData(GL_ARRAY_BUFFER, donutVertices.size() * sizeof(float), &donutVertices[0], GL_STATIC_DRAW);
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, donutIndices.size() * sizeof(unsigned int), &donutIndices[0], GL_STATIC_DRAW);
+
+    // position attribute
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    // normal attribute
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
+    glEnableVertexAttribArray(1);*/
+
+
+
+
 
     // load textures (we now use a utility function to keep the code more organized)
     unsigned int grassMap = loadTexture("resources/textures/grass.png");
+
+    vector<std::string> faces
+    {
+        "resources/textures/skybox/right.jpg",
+        "resources/textures/skybox/left.jpg",
+        "resources/textures/skybox/top.jpg",
+        "resources/textures/skybox/bottom.jpg",
+        "resources/textures/skybox/front.jpg",
+        "resources/textures/skybox/back.jpg"
+    };
+    unsigned int cubemapTexture = loadCubemap(faces);
 
 
     // depth map FBO
@@ -178,6 +384,10 @@ int main()
     //grassShader.setInt("texture_diffuse", 0);
     //grassShader.setInt("diffuseTexture", 0);
     //grassShader.setInt("shadowMap", 1);
+    shadow.use();
+    shadow.setInt("diffuseTexture", 0);
+    shadow.setInt("shadowMap", 1);
+    shadow.setInt("skybox", 2);
 
     // load models
     // -----------
@@ -233,6 +443,7 @@ int main()
         glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
         glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
         glClear(GL_DEPTH_BUFFER_BIT);
+        glDepthFunc(GL_LEQUAL); 
         depthShader.use();
         for (unsigned int i = 0; i < 6; ++i)
             depthShader.setMat4("shadowMatrices[" + std::to_string(i) + "]", shadowTransforms[i]);
@@ -262,6 +473,22 @@ int main()
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_CUBE_MAP, depthCubemap);
         renderScene(shadow, backPack);
+
+        /*// render skybox
+        glDepthFunc(GL_LEQUAL);
+        shadow.use();
+        shadow.setBool("isSkybox", true);   
+        shadow.setBool("isLightSource", false);
+        shadow.setMat4("projection", projection);
+        shadow.setMat4("view", view);
+        glBindVertexArray(skyboxVAO);
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
+        
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+        glBindVertexArray(0);
+        glDepthFunc(GL_LESS);*/
+
         
         /*
         // render scene from light's point of view
@@ -489,6 +716,28 @@ void processInput(GLFWwindow *window)
         camera.ProcessKeyboard(LEFT, deltaTime);
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
         camera.ProcessKeyboard(RIGHT, deltaTime);
+
+     // 移动整体车辆（按键控制）
+    if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
+        vehicleModel = glm::translate(vehicleModel, glm::vec3(0.0f, 0.0f, -cameraSpeed));
+    }
+    if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) {
+        vehicleModel = glm::translate(vehicleModel, glm::vec3(0.0f, 0.0f, cameraSpeed));
+    }
+    if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS) {
+        vehicleModel = glm::translate(vehicleModel, glm::vec3(-cameraSpeed, 0.0f, 0.0f));
+    }
+    if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS) {
+        vehicleModel = glm::translate(vehicleModel, glm::vec3(cameraSpeed, 0.0f, 0.0f));
+    }
+
+        // 控制头部旋转
+    if (glfwGetKey(window, GLFW_KEY_1) == GLFW_PRESS) {
+        headRotationAngle -= rotationSpeed;
+    }
+    if (glfwGetKey(window, GLFW_KEY_2) == GLFW_PRESS) {
+        headRotationAngle += rotationSpeed;
+    }
 }
 
 // glfw: whenever the window size changed (by OS or user resize) this callback function executes
@@ -680,14 +929,50 @@ unsigned int loadTexture(char const * path)
 // --------------------
 void renderScene(Shader &shader, Model &backPack)
 {
+
     // render plane
-    glm::mat4 model = glm::mat4(1.0f);
+    glm::mat4 model;
+    model = glm::mat4(1.0f);
     shader.setBool("isLightSource", false);
     shader.setBool("isModel", true);
+    shader.setBool("isSkybox", false);
     shader.setMat4("model", model);
     shader.setVec3("lightColor", lightColor);
     glBindVertexArray(planeVAO);
     glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+
+    
+
+
+    // render donut
+    model = glm::mat4(1.0f);
+    model = glm::translate(model, glm::vec3(0.5f, 0.13f, 0.0f));
+    model = glm::scale(model, glm::vec3(0.1f, 0.1f, 0.1f));
+    // 旋转圆环：每一帧旋转一定角度
+    float angle = glfwGetTime() * 50.0f; // 用时间控制旋转角度，50.0f 表示每秒旋转 50 度
+    model = glm::rotate(model, glm::radians(angle), glm::vec3(0.0f, 1.0f, 0.0f)); // 绕 y 轴旋转
+
+    shader.setBool("isLightSource", false);
+    shader.setBool("isModel", false);
+    shader.setBool("isSkybox", false);
+    shader.setMat4("model", model);
+    shader.setVec3("lightColor", lightColor);
+    shader.setVec3("objectColor", 1.0f, 0.647f, 0.0f);
+    glBindVertexArray(donutVAO);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, donutVertices.size() / 6);
+
+    /*// render cube
+    model = glm::mat4(1.0f);
+    model = glm::translate(model, glm::vec3(0.0f, 0.13f, 0.0f));
+    model = glm::scale(model, glm::vec3(0.08f, 0.08f, 0.08f));
+    shader.setBool("isLightSource", false);
+    shader.setBool("isModel", false);
+    shader.setMat4("model", model);
+    shader.setVec3("lightColor", lightColor);
+    shader.setVec3("objectColor", 1.0f, 0.5f, 0.31f);
+    glBindVertexArray(cubeVAO);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+    */
 
     // render the loaded model
     model = glm::mat4(1.0f);
@@ -695,9 +980,110 @@ void renderScene(Shader &shader, Model &backPack)
     model = glm::scale(model, glm::vec3(0.08f, 0.08f, 0.08f));	// it's a bit too big for our scene, so scale it down
      shader.setBool("isLightSource", false);
      shader.setBool("isModel", true);
+     shader.setBool("isSkybox", false);
     shader.setMat4("model", model);
     shader.setVec3("lightColor", lightColor);
     backPack.Draw(shader);
+
+   
+    // render the vehicle
+    model = vehicleModel;
+    // 1. render the body
+    model = glm::translate(model, glm::vec3(0.0f, 0.10f, 0.6f)); // translate it down so it's at the center of the scene
+    model = glm::scale(model, glm::vec3(0.09f, 0.12f, 0.12f));	// it's a bit too big for our scene, so scale it down
+    shader.setBool("isLightSource", false);
+    shader.setBool("isModel", false);
+    shader.setBool("isSkybox", false);
+    shader.setMat4("model", model);
+    shader.setVec3("lightColor", lightColor);
+    shader.setVec3("objectColor", 0.0f, 0.0f, 1.0f);
+    glBindVertexArray(bodyVAO);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+
+    // 2. render the head
+    model = vehicleModel;
+    model = glm::translate(model, glm::vec3(0.0f, 0.20f, 0.6f)); // translate it down so it's at the center of the scene
+    model = glm::rotate(model, glm::radians(headRotationAngle), glm::vec3(0.0f, 0.19f, 0.0f)); // 旋转头部
+    model = glm::scale(model, glm::vec3(0.09f, 0.09f, 0.09f));	// it's a bit too big for our scene, so scale it down
+    shader.setBool("isLightSource", false);
+    shader.setBool("isModel", false);
+    shader.setBool("isSkybox", false);
+    shader.setMat4("model", model);
+    shader.setVec3("lightColor", lightColor);
+    shader.setVec3("objectColor", 1.0f, 0.5f, 1.0f);
+    glBindVertexArray(cubeVAO);
+    glDrawArrays(GL_TRIANGLES, 0, 36);   
+
+    /* // weapon
+    glm::mat4 cylinderModel = model; // 使用头部的旋转矩阵
+    //model = vehicleModel;
+    //model = glm::translate(model, glm::vec3(0.0f, 0.19f, 0.53f)); // translate it down so it's at the center of the scene
+    cylinderModel = glm::translate(cylinderModel, glm::vec3(0.0f, 0.0f, -1.0f)); // translate it down so it's at the center of the scene
+    //model = glm::rotate(model, glm::radians(headRotationAngle), glm::vec3(0.0f, 1.0f, 0.0f)); // 旋转头部
+    cylinderModel = glm::rotate(cylinderModel, glm::radians(headRotationAngle), glm::vec3(0.0f, 1.0f, 0.0f)); // 旋转头部
+    //cylinderModel = glm::scale(cylinderModel, glm::vec3(0.3f, 0.3f, 0.08f));	// it's a bit too big for our scene, so scale it down
+    shader.setBool("isLightSource", false);
+    shader.setBool("isModel", false);
+    shader.setMat4("model", cylinderModel);
+    shader.setVec3("lightColor", lightColor);
+    shader.setVec3("objectColor", 0.0f, 1.0f, 0.0f);
+    glBindVertexArray(weaponVAO);
+    // glDrawArrays(GL_TRIANGLE_FAN, 0, weapon.size() / 6); 
+    glDrawElements(GL_TRIANGLES, weaponIndices.size(), GL_UNSIGNED_INT, 0);  
+    */
+
+    // 3. render the wheel
+    model = vehicleModel;
+    model = glm::translate(model, glm::vec3(-0.042f, 0.03f, 0.53f)); // translate it down so it's at the center of the scene
+    model = glm::scale(model, glm::vec3(0.06f, 0.06f, 0.06f));	// it's a bit too big for our scene, so scale it down
+    shader.setBool("isLightSource", false);
+    shader.setBool("isModel", false);
+    shader.setBool("isSkybox", false);
+    shader.setMat4("model", model);
+    shader.setVec3("lightColor", lightColor);
+    shader.setVec3("objectColor", 1.0f, 1.0f, 0.0f);
+    glBindVertexArray(wheelVAO);
+    glDrawElements(GL_TRIANGLES, wheelIndices.size(), GL_UNSIGNED_INT, 0);
+    //glDrawArrays(GL_TRIANGLE_STRIP, 0, wheel.size() / 6);
+
+    model = vehicleModel;
+    model = glm::translate(model, glm::vec3(0.042f, 0.03f, 0.53f)); // translate it down so it's at the center of the scene
+    model = glm::scale(model, glm::vec3(0.06f, 0.06f, 0.06f));	// it's a bit too big for our scene, so scale it down
+    shader.setBool("isLightSource", false);
+    shader.setBool("isModel", false);
+    shader.setBool("isSkybox", false);
+    shader.setMat4("model", model);
+    shader.setVec3("lightColor", lightColor);
+    shader.setVec3("objectColor", 1.0f, 1.0f, 0.0f);
+    glBindVertexArray(wheelVAO);
+    glDrawElements(GL_TRIANGLES, wheelIndices.size(), GL_UNSIGNED_INT, 0);
+
+    model = vehicleModel;
+    model = glm::translate(model, glm::vec3(0.042f, 0.03f, 0.67f)); // translate it down so it's at the center of the scene
+    model = glm::scale(model, glm::vec3(0.06f, 0.06f, 0.06f));	// it's a bit too big for our scene, so scale it down
+    shader.setBool("isLightSource", false);
+    shader.setBool("isModel", false);
+    shader.setBool("isSkybox", false);
+    shader.setMat4("model", model);
+    shader.setVec3("lightColor", lightColor);
+    shader.setVec3("objectColor", 1.0f, 1.0f, 0.0f);
+    glBindVertexArray(wheelVAO);
+    glDrawElements(GL_TRIANGLES, wheelIndices.size(), GL_UNSIGNED_INT, 0);
+
+    model = vehicleModel;
+    model = glm::translate(model, glm::vec3(-0.042f, 0.03f, 0.67f)); // translate it down so it's at the center of the scene
+    model = glm::scale(model, glm::vec3(0.06f, 0.06f, 0.06f));	// it's a bit too big for our scene, so scale it down
+    shader.setBool("isLightSource", false);
+    shader.setBool("isModel", false);
+    shader.setBool("isSkybox", false);
+    shader.setMat4("model", model);
+    shader.setVec3("lightColor", lightColor);
+    shader.setVec3("objectColor", 1.0f, 1.0f, 0.0f);
+    glBindVertexArray(wheelVAO);
+    glDrawElements(GL_TRIANGLES, wheelIndices.size(), GL_UNSIGNED_INT, 0);
+
+    
+
 
     // render light cube
     model = glm::mat4(1.0f);
@@ -705,48 +1091,60 @@ void renderScene(Shader &shader, Model &backPack)
     model = glm::scale(model, glm::vec3(0.6f)); // a smaller cube
     shader.setBool("isLightSource", true);
     shader.setBool("isModel", true);
+    shader.setBool("isSkybox", false);
     shader.setMat4("model", model);
     shader.setVec3("lightColor", lightColor);
     glBindVertexArray(lightCubeVAO);
     glDrawArrays(GL_TRIANGLES, 0, sphereVertices.size() / 6);
     
-    // render donut
+
+    //glDisable(GL_CULL_FACE); // note that we disable culling here since we render 'inside' the cube instead of the usual 'outside' which throws off the normal culling methods.
+    //shader.setInt("reverse_normals", 1); // A small little hack to invert normals when drawing cube from the inside so lighting still works.
+
+    // render skybox
+    /*glDepthFunc(GL_LEQUAL);  // change depth function so depth test passes when values are equal to depth buffer's content]
     model = glm::mat4(1.0f);
-    model = glm::translate(model, glm::vec3(0.0f, 0.13f, -0.6f));
-    model = glm::scale(model, glm::vec3(0.1f, 0.1f, 0.1f));
-    shader.setBool("isLightSource", false);
-    shader.setBool("isModel", false);
+    model = glm::scale(model, glm::vec3(5.0f));
     shader.setMat4("model", model);
+    shader.setBool("isLightSource", false);
+    shader.setBool("isModel", true);
     shader.setVec3("lightColor", lightColor);
-    shader.setVec3("objectColor", 1.0f, 0.647f, 0.0f);
-    glBindVertexArray(donutVAO);
-    glDrawArrays(GL_TRIANGLES, 0, donutVertices.size() / 6);
+    shader.setBool("isSkybox", true);
+    glDisable(GL_CULL_FACE); // note that we disable culling here since we render 'inside' the cube instead of the usual 'outside' which throws off the normal culling methods.
+    //shader.setInt("reverse_normals", 1); // A small little hack to invert normals when drawing cube from the inside so lighting still works.
+    glBindVertexArray(skyboxVAO);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+    //shader.setInt("reverse_normals", 0); // and of course disable it
+    glEnable(GL_CULL_FACE);
+    glDepthFunc(GL_LESS); // set depth function back to default*/
+
 }
 
 // 生成甜甜圈顶点数据
 std::vector<float> generateDonutVertices(float R, float r, unsigned int sectorCount, unsigned int stackCount)
 {
     std::vector<float> vertices;
+    //std::vector<unsigned int> indices;
     float x, y, z, xy;                              // vertex position
     float nx, ny, nz, lengthInv = 1.0f;            // vertex normal
     float sectorStep = 2 * M_PI / sectorCount;      // Angle between each sector
-    float stackStep = M_PI / stackCount;            // Angle between each stack
+    float stackStep = 2 * M_PI / stackCount;        // Angle between each stack
     float sectorAngle, stackAngle;
 
     for (unsigned int i = 0; i <= stackCount; ++i)
     {
-        stackAngle = M_PI / 2 - i * stackStep;       // Starting from pi/2 to -pi/2
-        xy = R + r * cosf(stackAngle);               // r * cos(u) + R
-        z = r * sinf(stackAngle);                    // r * sin(u)
+        stackAngle = i * stackStep;                 // Starting from 0 to 2pi
+        xy = R + r * cosf(stackAngle);              // r * cos(u) + R
+        z = r * sinf(stackAngle);                   // r * sin(u)
 
         // Loop through each sector
         for (unsigned int j = 0; j <= sectorCount; ++j)
         {
-            sectorAngle = j * sectorStep;            // Starting from 0 to 2pi
+            sectorAngle = j * sectorStep;           // Starting from 0 to 2pi
 
             // Vertex position (x, y, z)
-            x = xy * cosf(sectorAngle);              // r * cos(u) * cos(v)
-            y = xy * sinf(sectorAngle);              // r * cos(u) * sin(v)
+            x = xy * cosf(sectorAngle);             // r * cos(u) * cos(v)
+            y = xy * sinf(sectorAngle);             // r * cos(u) * sin(v)
             vertices.push_back(x);
             vertices.push_back(y);
             vertices.push_back(z);
@@ -761,7 +1159,309 @@ std::vector<float> generateDonutVertices(float R, float r, unsigned int sectorCo
         }
     }
 
+    // Generate indices
+    for (unsigned int i = 0; i < stackCount; ++i)
+    {
+        for (unsigned int j = 0; j < sectorCount; ++j)
+        {
+            unsigned int first = (i * (sectorCount + 1)) + j;
+            unsigned int second = first + sectorCount + 1;
+
+            donutIndices.push_back(first);
+            donutIndices.push_back(second);
+            donutIndices.push_back(first + 1);
+
+            donutIndices.push_back(second);
+            donutIndices.push_back(second + 1);
+            donutIndices.push_back(first + 1);
+        }
+    }
+
+    std::vector<float> donutVertices;
+    for (unsigned int i = 0; i < donutIndices.size(); ++i)
+    {
+        unsigned int index = donutIndices[i];
+        donutVertices.push_back(vertices[index * 6]);
+        donutVertices.push_back(vertices[index * 6 + 1]);
+        donutVertices.push_back(vertices[index * 6 + 2]);
+        donutVertices.push_back(vertices[index * 6 + 3]);
+        donutVertices.push_back(vertices[index * 6 + 4]);
+        donutVertices.push_back(vertices[index * 6 + 5]);
+    }
+
+    return donutVertices;
+}
+
+std::vector<float> generateCylinderVertices(float radius, float height, unsigned int sectorCount, std::vector<unsigned int>& indices)
+{
+    std::vector<float> vertices;
+    float x, y, z, nx, ny, nz;
+    float sectorStep = 2 * M_PI / sectorCount;
+    float sectorAngle;
+
+    // 1. Top cap
+    for (unsigned int i = 0; i <= sectorCount; ++i)
+    {
+        sectorAngle = i * sectorStep;
+        x = radius * cosf(sectorAngle);
+        y = radius * sinf(sectorAngle);
+        z = height / 2;
+        vertices.push_back(x);
+        vertices.push_back(y);
+        vertices.push_back(z);
+        vertices.push_back(0.0f);
+        vertices.push_back(0.0f);
+        vertices.push_back(1.0f);
+    }
+
+    // 2. Bottom cap
+    for (unsigned int i = 0; i <= sectorCount; ++i)
+    {
+        sectorAngle = i * sectorStep;
+        x = radius * cosf(sectorAngle);
+        y = radius * sinf(sectorAngle);
+        z = -height / 2;
+        vertices.push_back(x);
+        vertices.push_back(y);
+        vertices.push_back(z);
+        vertices.push_back(0.0f);
+        vertices.push_back(0.0f);
+        vertices.push_back(-1.0f);
+    }
+
+    // 3. Side
+    for (unsigned int i = 0; i <= sectorCount; ++i)
+    {
+        sectorAngle = i * sectorStep;
+        x = radius * cosf(sectorAngle);
+        y = radius * sinf(sectorAngle);
+        z = height / 2;
+        vertices.push_back(x);
+        vertices.push_back(y);
+        vertices.push_back(z);
+        vertices.push_back(cosf(sectorAngle));
+        vertices.push_back(sinf(sectorAngle));
+        vertices.push_back(0.0f);
+
+        x = radius * cosf(sectorAngle);
+        y = radius * sinf(sectorAngle);
+        z = -height / 2;
+        vertices.push_back(x);
+        vertices.push_back(y);
+        vertices.push_back(z);
+        vertices.push_back(cosf(sectorAngle));
+        vertices.push_back(sinf(sectorAngle));
+        vertices.push_back(0.0f);
+    }
+
+    // Generate indices for top cap
+    for (unsigned int i = 0; i < sectorCount; ++i)
+    {
+        indices.push_back(0);
+        indices.push_back(i + 1);
+        indices.push_back(i + 2);
+    }
+
+    // Generate indices for bottom cap
+    unsigned int baseIndex = sectorCount + 1;
+    for (unsigned int i = 0; i < sectorCount; ++i)
+    {
+        indices.push_back(baseIndex);
+        indices.push_back(baseIndex + i + 1);
+        indices.push_back(baseIndex + i + 2);
+    }
+
+    // Generate indices for side
+    baseIndex = (sectorCount + 1) * 2;
+    for (unsigned int i = 0; i < sectorCount; ++i)
+    {
+        unsigned int k1 = baseIndex + i * 2;
+        unsigned int k2 = k1 + 1;
+        unsigned int k3 = k1 + 2;
+        unsigned int k4 = k3 + 1;
+
+        indices.push_back(k1);
+        indices.push_back(k2);
+        indices.push_back(k3);
+
+        indices.push_back(k2);
+        indices.push_back(k4);
+        indices.push_back(k3);
+    }
+
     return vertices;
+}
+
+std::vector<float> generateHollowCylinderVertices(float R, float r, float height, unsigned int sectorCount, std::vector<unsigned int>& indices)
+{
+    // generate a hollow cylinder
+    std::vector<float> vertices;
+    float x, y, z, nx, ny, nz;
+    float sectorStep = 2 * M_PI / sectorCount;
+    float sectorAngle;
+
+    // 1. Top cap
+    for (unsigned int i = 0; i <= sectorCount; ++i)
+    {
+        sectorAngle = i * sectorStep;
+        x = R * cosf(sectorAngle);
+        y = R * sinf(sectorAngle);
+        z = height / 2;
+        vertices.push_back(x);
+        vertices.push_back(y);
+        vertices.push_back(z);
+        vertices.push_back(0.0f);
+        vertices.push_back(0.0f);
+        vertices.push_back(1.0f);
+    }
+
+    // 2. Bottom cap
+    for (unsigned int i = 0; i <= sectorCount; ++i)
+    {
+        sectorAngle = i * sectorStep;
+        x = r * cosf(sectorAngle);
+        y = r * sinf(sectorAngle);
+        z = -height / 2;
+        vertices.push_back(x);
+        vertices.push_back(y);
+        vertices.push_back(z);
+        vertices.push_back(0.0f);
+        vertices.push_back(0.0f);
+        vertices.push_back(-1.0f);
+    }
+
+    // 3. Side
+    for (unsigned int i = 0; i <= sectorCount; ++i)
+    {
+        sectorAngle = i * sectorStep;
+        x = R * cosf(sectorAngle);
+        y = R * sinf(sectorAngle);
+        z = height / 2;
+        vertices.push_back(x);
+        vertices.push_back(y);
+        vertices.push_back(z);
+        vertices.push_back(cosf(sectorAngle));
+        vertices.push_back(sinf(sectorAngle));
+        vertices.push_back(0.0f);
+
+        x = r * cosf(sectorAngle);
+        y = r * sinf(sectorAngle);
+        z = -height / 2;
+        vertices.push_back(x);
+        vertices.push_back(y);
+        vertices.push_back(z);
+        vertices.push_back(cosf(sectorAngle));
+        vertices.push_back(sinf(sectorAngle));
+        vertices.push_back(0.0f);
+    }
+
+    // Generate indices for top cap
+    for (unsigned int i = 0; i < sectorCount; ++i)
+    {
+        indices.push_back(0);
+        indices.push_back(i + 1);
+        indices.push_back(i + 2);
+    }
+
+    // Generate indices for bottom cap
+    unsigned int baseIndex = sectorCount + 1;   
+    for (unsigned int i = 0; i < sectorCount; ++i)
+    {
+        indices.push_back(baseIndex);
+        indices.push_back(baseIndex + i + 1);
+        indices.push_back(baseIndex + i + 2);
+    }
+
+    // Generate indices for side
+    baseIndex = (sectorCount + 1) * 2;
+    for (unsigned int i = 0; i < sectorCount; ++i)
+    {
+        unsigned int k1 = baseIndex + i * 2;
+        unsigned int k2 = k1 + 1;
+        unsigned int k3 = k1 + 2;
+        unsigned int k4 = k3 + 1;
+
+        indices.push_back(k1);
+        indices.push_back(k2);
+        indices.push_back(k3);
+
+        indices.push_back(k2);
+        indices.push_back(k4);
+        indices.push_back(k3);
+    }
+
+    return vertices;
+}
+
+unsigned int setupMeshWithIndices(const std::vector<float>& vertices, const std::vector<unsigned int>& indices, const std::vector<unsigned int>& attributes)
+{
+    unsigned int VAO, VBO, EBO;
+    glGenVertexArrays(1, &VAO);
+    glGenBuffers(1, &VBO);
+    glGenBuffers(1, &EBO);
+
+    glBindVertexArray(VAO);
+
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STATIC_DRAW);
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW);
+
+    // 设置顶点属性指针
+    size_t stride = 0;
+    for (auto attr : attributes) stride += attr; // 计算步长
+    stride *= sizeof(float);
+
+    size_t offset = 0;
+    for (unsigned int i = 0; i < attributes.size(); ++i)
+    {
+        glVertexAttribPointer(i, attributes[i], GL_FLOAT, GL_FALSE, stride, (void*)(offset * sizeof(float)));
+        glEnableVertexAttribArray(i);
+        offset += attributes[i];
+    }
+
+    glBindVertexArray(0); // 解绑 VAO
+    return VAO;
+} 
+
+// loads a cubemap texture from 6 individual texture faces
+// order:
+// +X (right)
+// -X (left)
+// +Y (top)
+// -Y (bottom)
+// +Z (front) 
+// -Z (back)
+// -------------------------------------------------------
+unsigned int loadCubemap(vector<std::string> faces)
+{
+    unsigned int textureID;
+    glGenTextures(1, &textureID);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, textureID);
+
+    int width, height, nrChannels;
+    for (unsigned int i = 0; i < faces.size(); i++)
+    {
+        unsigned char *data = stbi_load(faces[i].c_str(), &width, &height, &nrChannels, 0);
+        if (data)
+        {
+            glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+            stbi_image_free(data);
+        }
+        else
+        {
+            std::cout << "Cubemap texture failed to load at path: " << faces[i] << std::endl;
+            stbi_image_free(data);
+        }
+    }
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+
+    return textureID;
 }
 
 
