@@ -64,7 +64,7 @@ glm::vec3 lightColor(1.0f, 0.98f, 0.75f);
 float rotationSpeed = 0.5f;
 
 // camera speed (can adjust this value)
-float cameraSpeed = 0.005f;
+float cameraSpeed = 0.0005f;
 
 // 头部的旋转矩阵
 float headRotationAngle = 0.0f;
@@ -106,7 +106,7 @@ int main()
 
     // glfw window creation
     // --------------------
-    GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "LearnOpenGL", NULL, NULL);
+    GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "OpenGL-Scene", NULL, NULL);
     if (window == NULL)
     {
         std::cout << "Failed to create GLFW window" << std::endl;
@@ -941,7 +941,6 @@ void renderScene(Shader &shader, Model &backPack)
     glBindVertexArray(planeVAO);
     glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
 
-    
 
 
     // render donut
@@ -951,7 +950,6 @@ void renderScene(Shader &shader, Model &backPack)
     // 旋转圆环：每一帧旋转一定角度
     float angle = glfwGetTime() * 50.0f; // 用时间控制旋转角度，50.0f 表示每秒旋转 50 度
     model = glm::rotate(model, glm::radians(angle), glm::vec3(0.0f, 1.0f, 0.0f)); // 绕 y 轴旋转
-
     shader.setBool("isLightSource", false);
     shader.setBool("isModel", false);
     shader.setBool("isSkybox", false);
@@ -1033,6 +1031,7 @@ void renderScene(Shader &shader, Model &backPack)
     */
 
     // 3. render the wheel
+    //glm::mat4 model;
     model = vehicleModel;
     model = glm::translate(model, glm::vec3(-0.042f, 0.03f, 0.53f)); // translate it down so it's at the center of the scene
     model = glm::scale(model, glm::vec3(0.06f, 0.06f, 0.06f));	// it's a bit too big for our scene, so scale it down

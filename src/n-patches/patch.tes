@@ -1,0 +1,30 @@
+#version 410 core
+
+layout(triangles, equal_spacing, cw) in; // 定义细分模式为三角形，等间隔，顺时针方向
+
+// 输入顶点属性
+in vec3 normal[]; // 如果有法向量数据，需要传递
+
+// 输出数据
+out vec3 fragNormal; // 输出片段法向量
+out vec3 fragPosition; // 输出片段坐标
+
+void main()
+{
+    // 获取 Barycentric 坐标
+    vec3 barycentric = gl_TessCoord; // (u, v, w)
+
+    // 使用 Barycentric 坐标插值计算曲面上的位置
+    vec3 p0 = gl_in[0].gl_Position.xyz;
+    vec3 p1 = gl_in[1].gl_Position.xyz;
+    vec3 p2 = gl_in[2].gl_Position.xyz;
+
+    vec3 position = p0 * barycentric.x + p1 * barycentric.y + p2 * barycentric.z;
+
+    // 如果有法向量，计算插值后的法向量
+    fragNormal = normalize(vec3(0.0, 0.0, 1.0)); // 示例：平面法向量（可替换为插值后的）
+
+    // 输出坐标
+    fragPosition = position;
+    gl_Position = vec4(position, 1.0); // 输出曲面点的变换后位置
+}

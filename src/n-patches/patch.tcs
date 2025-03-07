@@ -1,0 +1,19 @@
+#version 410 core
+
+layout(vertices = 3) out; // 定义细分的输入是 3 个顶点（三角形）
+
+void main()
+{
+    // 将每个输入顶点直接传递到评估着色器
+    gl_out[gl_InvocationID].gl_Position = gl_in[gl_InvocationID].gl_Position;
+
+    // 传递其他顶点属性，例如法向量
+    // 注意：如果有自定义的顶点属性，需在此传递
+
+    // 定义细分级别
+    // 这里可以根据视距或曲率动态调整
+    gl_TessLevelOuter[0] = 5.0; // 第一条边的细分级别
+    gl_TessLevelOuter[1] = 5.0; // 第二条边的细分级别
+    gl_TessLevelOuter[2] = 5.0; // 第三条边的细分级别
+    gl_TessLevelInner[0] = 5.0; // 内部细分级别
+}
