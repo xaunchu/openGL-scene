@@ -246,13 +246,13 @@ function main():
 ## 2. 草地
 本项目中，先创建了一个正方形的图形。然后绑定一张png格式的草地图片进行渲染。
 
-![[Pasted image 20241229215822.png]]
+![](https://github.com/xaunchu/openGL-scene/blob/master/images/Pasted%20image%2020241229215822.png)
 ---
 
 ## 3. 背包
 背包是用开源项目 `LearnOpenGL` 中的obj文件导入的，如下：
 
-![[Pasted image 20241230154240.png]]
+![](https://github.com/xaunchu/openGL-scene/blob/master/images/Pasted%20image%2020241230154240.png)
 
 ---
 ## 4. 圆环几何体
@@ -332,7 +332,7 @@ std::vector<float> generateDonutVertices(float R, float r, unsigned int sectorCo
     model = glm::rotate(model, glm::radians(angle), glm::vec3(0.0f, 1.0f, 0.0f)); // 绕 y 轴旋转
 ```
 
-![[Pasted image 20241230154446.png]]
+![](https://github.com/xaunchu/openGL-scene/blob/master/images/Pasted%20image%2020241230154446.png)
 
 ---
 ## 5. 光源
@@ -370,7 +370,7 @@ lightPos = glm::vec3(cos(angle) * radius, 2.0f, sin(angle) * radius);
 lightPos.y = 0.5f + sin(angle * 0.5f) * 2.0f; // 上下浮动
 ```
 
-![[Pasted image 20241230154600.png]]
+![](https://github.com/xaunchu/openGL-scene/blob/master/images/Pasted%20image%2020241230154600.png)
 
 ---
 ## 6. 组合几何体（模拟汽车）
@@ -490,7 +490,7 @@ if (glfwGetKey(window, GLFW_KEY_2) == GLFW_PRESS) {
 	headRotationAngle += rotationSpeed;
 }
 ```
-![[Pasted image 20241230154717.png]]
+![](https://github.com/xaunchu/openGL-scene/blob/master/images/Pasted%20image%2020241230154717.png)
 
 ---
 # 四、其它主要代码（伪代码）
